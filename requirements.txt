@@ -1,0 +1,5 @@
+numpy<2.0
+pymc>=5.0
+pandas>=1.0
+scipy>=1.5
+pytensor>=2.0
