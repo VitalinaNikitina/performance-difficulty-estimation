@@ -5,7 +5,8 @@ from scipy.optimize import minimize
 import scipy.stats as st
 from typing import Tuple, Optional
 
-def map_estimator(marks: np.ndarray, retakes: bool = False, verbose: bool = False) -> Tuple[pd.Series, pd.Series]:
+def map_estimator(marks: np.ndarray, aprior_beta_params: list = [3, 3],
+                   retakes: bool = False, verbose: bool = False) -> Tuple[pd.Series, pd.Series]:
     """
     Функция оценивает максимум апостериорного распределения (MAP) и возвращают Series
     со значениями параметров performance и difficulty, при которых этот максимум достигается
@@ -13,10 +14,14 @@ def map_estimator(marks: np.ndarray, retakes: bool = False, verbose: bool = Fals
     Parameters
     ----------
     marks : np.ndarray
-        Таблица оценок студентов размера (students_count, units_count), содержащая значения 0, 1 и, возможно, NaN.
+        Таблица оценок студентов размера (students_count, units_count)
+        - При retakes=False: содержит значения 0 и 1. Допускается NaN
+        - При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток). Допускается NaN
+    aprior_beta_params : list, default = [3, 3]
+        Содержит два параметра для априорного Бета-распределения. По-умолчанию априорное распределение Beta(3, 3)
     retakes : bool, optional, default = False
         Если True, используется модель с учетом пересдач, где наблюдаемые данные моделируются как смесь
-        распределений Бернулли и геометрического. Если False, используется стандартная модель Бернулли.
+        распределений Бернулли и геометрического. Если False, используется стандартная модель Бернулли
     verbose : bool, optional, default = False
         Если True, будет показываться прогресс оптимизации
 
@@ -29,7 +34,6 @@ def map_estimator(marks: np.ndarray, retakes: bool = False, verbose: bool = Fals
 
     Notes
     -----
-    - Априорные распределения: Beta(3, 3) для всех параметров
     - Вероятностная модель: p = 1 - difficulty * (1 - performance)
     - При retakes=True используется смешанная модель:
         * Компонента 1: Бернулли с очень малой вероятностью (для неудачных попыток)
@@ -40,11 +44,12 @@ def map_estimator(marks: np.ndarray, retakes: bool = False, verbose: bool = Fals
     """
     marks = np.array(marks, dtype=float)
     students_count, units_count = marks.shape
-    param_loc = 3.0
+    alpha = aprior_beta_params[0]
+    beta= aprior_beta_params[1]
 
     with pm.Model() as model:
-        performances = pm.Beta("performance", alpha=param_loc, beta=param_loc, shape=students_count)
-        difficulties = pm.Beta("difficulty", alpha=param_loc, beta=param_loc, shape=units_count)
+        performances = pm.Beta("performance", alpha=alpha, beta=beta, shape=students_count)
+        difficulties = pm.Beta("difficulty", alpha=alpha, beta=beta, shape=units_count)
 
         p = 1 - difficulties[None, :] * (1 - performances[:, None])
 
@@ -71,7 +76,8 @@ def map_estimator(marks: np.ndarray, retakes: bool = False, verbose: bool = Fals
 
     return performance_table, difficulty_table
 
-def mcmc_estimator(marks: np.ndarray, retakes: bool = False, n_samples: int = 20,
+def mcmc_estimator(marks: np.ndarray, aprior_beta_params: list = [3, 3],
+                   retakes: bool = False, n_samples: int = 20,
                    verbose: bool = False) -> Tuple[pd.Series, pd.Series]:
     '''
     Функция возвращает Series с параметрами performance и difficulty, которые являются выборочными средними
@@ -80,14 +86,17 @@ def mcmc_estimator(marks: np.ndarray, retakes: bool = False, n_samples: int = 20
     Parameters
     ----------
     marks : np.ndarray
-        Матрица наблюдений (оценок) размера (students_count, units_count), 
-        содержащая значения 0, 1 и, возможно, NaN для пропущенных данных
+        Матрица наблюдений (оценок) размера (students_count, units_count)
+        - При retakes=False: содержит значения 0 и 1. Допускается NaN
+        - При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток). Допускается NaN
+    aprior_beta_params : list, default = [3, 3]
+        Содержит два параметра для априорного Бета-распределения. По-умолчанию априорное распределение Beta(3, 3).
     retakes : bool, optional, default = False
         Если True, используется модель с учетом пересдач, где наблюдаемые данные моделируются как смесь
-        распределений Бернулли и геометрического. Если False, используется стандартная модель Бернулли.
+        распределений Бернулли и геометрического. Если False, используется стандартная модель Бернулли
     n_samples : int, optional, default = 20
         Количество семплов для MCMC семплирования. Большее количество семплов может улучшить точность оценки,
-        но увеличит время выполнения.
+        но увеличит время выполнения
     verbose : bool, optional, default = False
         Если True, будет показываться прогресс семплирования
     
@@ -101,7 +110,6 @@ def mcmc_estimator(marks: np.ndarray, retakes: bool = False, n_samples: int = 20
     Notes
     -----
     Использует Bayesian подход с MCMC семплированием:
-    - Априорные распределения: Beta(3, 3) для всех параметров
     - Вероятностная модель: p = 1 - difficulty * (1 - performance)
     - При retakes=True используется смешанная модель:
         * Компонента 1: Бернулли с очень малой вероятностью (для неудачных попыток)
@@ -111,11 +119,12 @@ def mcmc_estimator(marks: np.ndarray, retakes: bool = False, n_samples: int = 20
     '''
     marks = np.array(marks, dtype=float)
     students_count, units_count = marks.shape
-    param_loc = 3.0
+    alpha = aprior_beta_params[0]
+    beta= aprior_beta_params[1]
 
     with pm.Model() as model:
-        performances = pm.Beta("performance", alpha=param_loc, beta=param_loc, shape=students_count)
-        difficulties = pm.Beta("difficulty", alpha=param_loc, beta=param_loc, shape=units_count)
+        performances = pm.Beta("performance", alpha=alpha, beta=beta, shape=students_count)
+        difficulties = pm.Beta("difficulty", alpha=alpha, beta=beta, shape=units_count)
 
         p = 1 - difficulties[None, :] * (1 - performances[:, None])
 
@@ -144,7 +153,7 @@ def mcmc_estimator(marks: np.ndarray, retakes: bool = False, n_samples: int = 20
 
     return performance_table, difficulty_table
 
-def _log_likelihood(params: np.ndarray, M: np.ndarray, retakes: bool = False) -> float:
+def _log_likelihood(params: np.ndarray, M: np.ndarray, retakes: bool = False, aprior_beta_params: list = [3, 3],) -> float:
     '''
     Функция принимает на вход параметры performance и difficulty
     и возвращает минус логарифмическую функцию правдоподобия
@@ -155,10 +164,12 @@ def _log_likelihood(params: np.ndarray, M: np.ndarray, retakes: bool = False) ->
         Вектор параметров, содержащий сначала параметры perf, затем параметры diff
     M : np.ndarray
         Матрица наблюдений размера (students_count, units_count)
-        При retakes=False: содержит значения 0 и 1
-        При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток)
+        - При retakes=False: содержит значения 0 и 1. Допускается NaN
+        - При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток). Допускается NaN
     retakes : bool, optional, default = False
         Если True, используется модель с учетом пересдач со смесью распределений
+    aprior_beta_params : list, default = [3, 3]
+        Содержит два параметра для априорного Бета-распределения. По-умолчанию априорное распределение Beta(3, 3)
     
     Returns
     -------
@@ -167,14 +178,13 @@ def _log_likelihood(params: np.ndarray, M: np.ndarray, retakes: bool = False) ->
     
     Notes
     -----
-    - Функция также включает априорные распределения Beta(3,3) для параметров perf и diff
     - Вероятностная модель: p = 1 - difficulty * (1 - performance)
     - При retakes=True используется смесь:
         * Бернулли с p=1e-8 (неудачные попытки)
         * Геометрического (количество попыток до успеха)
     '''
-    a = 3
-    b = 3
+    alpha = aprior_beta_params[0]
+    beta= aprior_beta_params[1]
     
     students_count, units_count = M.shape
     performance = params[:students_count]
@@ -214,12 +224,13 @@ def _log_likelihood(params: np.ndarray, M: np.ndarray, retakes: bool = False) ->
         mask_binary = (M == 0.0) | (M == 1.0)
         log_likelihood_val = np.sum(st.bernoulli.logpmf(M[mask_binary], p[mask_binary]))
 
-    log_likelihood_val += np.sum(st.beta.logpdf(difficulty, a, b))
-    log_likelihood_val += np.sum(st.beta.logpdf(performance, a, b))
+    log_likelihood_val += np.sum(st.beta.logpdf(difficulty, alpha, beta))
+    log_likelihood_val += np.sum(st.beta.logpdf(performance, alpha, beta))
     
     return -log_likelihood_val
 
-def mle_estimator(marks: np.ndarray, retakes: bool = False, initial_params: Optional[np.ndarray] = None
+def mle_estimator(marks: np.ndarray, aprior_beta_params: list = [3, 3],
+                   retakes: bool = False, initial_params: Optional[np.ndarray] = None
                   ) -> Tuple[pd.Series, pd.Series]:
     '''
     Функция возвращает Series с значениями параметров performance и difficulty,
@@ -229,16 +240,18 @@ def mle_estimator(marks: np.ndarray, retakes: bool = False, initial_params: Opti
     ----------
     marks : np.ndarray
         Матрица наблюдений (оценок) размера (students_count, units_count)
-        При retakes=False: содержит значения 0 и 1
-        При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток)
+        - При retakes=False: содержит значения 0 и 1. Допускается NaN
+        - При retakes=True: содержит количество попыток до успеха (≥1 для успешных попыток). Допускается NaN
+    aprior_beta_params : list, default = [3, 3]
+        Содержит два параметра для априорного Бета-распределения. По-умолчанию априорное распределение Beta(3, 3).
     retakes : bool, optional, default = False
         Если True, используется модель с учетом пересдач, где наблюдаемые данные 
         интерпретируются как количество попыток до успешной сдачи
     initial_params : Optional[np.ndarray], default=None
         Начальные значения параметров для оптимизации. Должны иметь длину (students_count + units_count),
         где первые students_count элементов - параметры performance (успеваемость),
-          остальные - параметры difficulty (сложность).
-        Если None, используется вектор из 0.5.
+          остальные - параметры difficulty (сложность)
+        Если None, используется вектор из 0.5
     
     Returns
     -------
@@ -266,7 +279,7 @@ def mle_estimator(marks: np.ndarray, retakes: bool = False, initial_params: Opti
         initial_params = np.full(students_count + units_count, 0.5)
 
     # Оптимизация
-    result = minimize(_log_likelihood, initial_params, args=(marks, retakes), method='Powell', bounds=bounds)
+    result = minimize(_log_likelihood, initial_params, args=(marks, retakes, aprior_beta_params), method='Powell', bounds=bounds)
 
     optimized_params = result.x
 
