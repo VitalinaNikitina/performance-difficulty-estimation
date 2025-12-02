@@ -27,11 +27,11 @@
 
 ### MAP Estimator
 - Maximum a Posteriori
-- Априорное распределение: Beta(3, 3)
+- Априорное распределение по-умолчанию: Beta(3, 3)
 
 ### MCMC Estimator
 - Markov Chain Monte Carlo
-- Априорное распределение: Beta(3, 3)
+- Априорное распределение по-умолчанию: Beta(3, 3)
 - 20 семплов (можно увеличить для реальных задач)
 
 ### MLE Estimator
